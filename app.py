@@ -37,9 +37,7 @@ def chamar_gemini(prompt, api_key):
 def salvar_planilha(dados, webhook_url):
     try:
         resposta = requests.post(webhook_url, json=dados, timeout=20)
-        if resposta.status_code == 200:
-            return True
-        return False
+        return resposta.status_code == 200
     except:
         return False
 
@@ -47,47 +45,38 @@ def salvar_planilha(dados, webhook_url):
 # ---------- CASOS ----------
 casos = {
     "Caso 1 - Ambiguidade: prazo indefinido": {
-        "tipo": "Ambiguidade",
         "texto": "Fale com o cliente quando puder.",
         "problema": "A frase não informa prazo. O leitor não sabe se deve falar hoje, amanhã ou em outro momento."
     },
     "Caso 2 - Ambiguidade: urgência vaga": {
-        "tipo": "Ambiguidade",
         "texto": "Preciso do relatório rápido.",
         "problema": "A palavra 'rápido' é subjetiva. Pode significar em minutos, horas ou até no fim do dia."
     },
     "Caso 3 - Ambiguidade: quantidade imprecisa": {
-        "tipo": "Ambiguidade",
         "texto": "Quase todo mundo confirmou presença.",
         "problema": "A frase não apresenta quantidade exata. Em ambiente profissional, números evitam dúvida."
     },
     "Caso 4 - Ambiguidade: tempo indefinido": {
-        "tipo": "Ambiguidade",
         "texto": "Vamos resolver isso depois.",
         "problema": "A palavra 'depois' não define quando a ação será feita, gerando insegurança e atraso."
     },
     "Caso 5 - Ambiguidade: frequência indefinida": {
-        "tipo": "Ambiguidade",
         "texto": "O produto está em falta às vezes.",
         "problema": "A expressão 'às vezes' não indica frequência. Falta precisão para orientar decisões."
     },
     "Caso 6 - Público: Diretoria": {
-        "tipo": "Adaptação de linguagem",
         "texto": "A equipe teve alguns problemas operacionais e estamos ajustando algumas coisas.",
         "problema": "Para a diretoria, o texto precisa focar em resultado, impacto, dados e decisão. Está vago demais."
     },
     "Caso 7 - Público: Cliente": {
-        "tipo": "Adaptação de linguagem",
         "texto": "Devido a inconsistências sistêmicas na base operacional, houve uma intercorrência.",
         "problema": "Para clientes, a linguagem deve ser clara, educada e compreensível. O texto usa termos técnicos demais."
     },
     "Caso 8 - Público: Equipe interna": {
-        "tipo": "Adaptação de linguagem",
         "texto": "Solicito que os procedimentos sejam realizados conforme alinhamento estratégico prévio.",
         "problema": "Para colegas de equipe, o texto pode ser mais direto, colaborativo e prático, sem perder profissionalismo."
     },
     "Caso 9 - Público: Fornecedor": {
-        "tipo": "Adaptação de linguagem",
         "texto": "Vê aí quando consegue entregar.",
         "problema": "Para fornecedores, a comunicação deve ser objetiva, formal e clara quanto a prazos e expectativas."
     }
@@ -115,15 +104,34 @@ with st.sidebar:
         st.session_state.clear()
         st.rerun()
 
+
+# ---------- ESTADOS ----------
 if "tentativas" not in st.session_state:
     st.session_state.tentativas = {}
+
+if "respostas_temp" not in st.session_state:
+    st.session_state.respostas_temp = {}
+
+if "ultimo_feedback" not in st.session_state:
+    st.session_state.ultimo_feedback = {}
+
+if "caso_atual" not in st.session_state:
+    st.session_state.caso_atual = None
+
 
 if nome:
     caso_escolhido = st.selectbox("Escolha o caso:", list(casos.keys()))
     caso = casos[caso_escolhido]
 
+    if st.session_state.caso_atual != caso_escolhido:
+        st.session_state.caso_atual = caso_escolhido
+        st.session_state.respostas_temp[caso_escolhido] = ""
+
     if caso_escolhido not in st.session_state.tentativas:
         st.session_state.tentativas[caso_escolhido] = 1
+
+    if caso_escolhido not in st.session_state.respostas_temp:
+        st.session_state.respostas_temp[caso_escolhido] = ""
 
     tentativa = st.session_state.tentativas[caso_escolhido]
 
@@ -135,15 +143,40 @@ if nome:
 
     st.write(f"### Tentativa atual: {tentativa}")
 
+    if tentativa == 1:
+        st.info("🟢 Primeira tentativa: reformule o texto com clareza e profissionalismo.")
+    elif tentativa == 2:
+        st.warning("🟡 Segunda tentativa: atenção aos pontos apontados pela IA. Ainda não será entregue resposta pronta.")
+    elif tentativa == 3:
+        st.error("🔴 Terceira tentativa: se ainda não estiver adequado, a IA apresentará uma versão recomendada para orientar sua reformulação.")
+    else:
+        st.error("🚨 Você já passou da terceira tentativa. Revise as orientações e faça uma construção final com mais atenção.")
+
     resposta_aluno = st.text_area(
         "Reescreva o texto de forma mais clara, profissional e adequada:",
-        height=160
+        value=st.session_state.respostas_temp[caso_escolhido],
+        height=160,
+        key=f"texto_{caso_escolhido}_{tentativa}"
     )
 
-    if st.button("Enviar para análise da consultoria IA"):
+    col1, col2 = st.columns([1, 1])
+
+    with col1:
+        enviar = st.button("📩 Enviar para análise da consultoria IA")
+
+    with col2:
+        refazer = st.button("🔄 Refazer / Nova tentativa")
+
+    if refazer:
+        st.session_state.respostas_temp[caso_escolhido] = ""
+        st.rerun()
+
+    if enviar:
         if not resposta_aluno.strip():
             st.warning("Digite sua reformulação antes de enviar.")
         else:
+            st.session_state.respostas_temp[caso_escolhido] = resposta_aluno
+
             with st.spinner("A consultoria IA está analisando sua resposta..."):
 
                 prompt = f"""
@@ -214,11 +247,15 @@ Status:
 
                 feedback = chamar_gemini(prompt, api_key)
 
+                st.session_state.ultimo_feedback[caso_escolhido] = feedback
+
                 st.subheader("📋 Retorno da Consultoria IA")
                 st.write(feedback)
 
                 status = "Precisa melhorar"
-                if "status: satisfatório" in feedback.lower() or "status:\n- satisfatório" in feedback.lower():
+                feedback_lower = feedback.lower()
+
+                if "status: satisfatório" in feedback_lower or "status:\n- satisfatório" in feedback_lower:
                     status = "Satisfatório"
 
                 dados = {
@@ -239,9 +276,22 @@ Status:
                 else:
                     st.error("Erro ao salvar na planilha.")
 
-                if status != "Satisfatório":
-                    st.session_state.tentativas[caso_escolhido] += 1
+                if status == "Satisfatório":
+                    st.success("✅ Atividade considerada satisfatória para este caso.")
                 else:
-                    st.success("Atividade considerada satisfatória para este caso.")
+                    st.session_state.tentativas[caso_escolhido] += 1
+
+                    if tentativa == 1:
+                        st.warning("Clique em **Refazer / Nova tentativa** para limpar o campo e escrever sua segunda tentativa.")
+                    elif tentativa == 2:
+                        st.warning("Clique em **Refazer / Nova tentativa** para limpar o campo e escrever sua terceira tentativa. Na terceira, a IA poderá apresentar uma versão recomendada.")
+                    elif tentativa >= 3:
+                        st.warning("A IA já apresentou orientação avançada. Clique em **Refazer / Nova tentativa** e construa uma versão final seguindo a recomendação.")
+
+    if caso_escolhido in st.session_state.ultimo_feedback:
+        st.divider()
+        st.subheader("🧾 Último retorno recebido")
+        st.write(st.session_state.ultimo_feedback[caso_escolhido])
+
 else:
     st.warning("👈 Digite seu nome na barra lateral para começar.")
