@@ -115,6 +115,9 @@ if "respostas_temp" not in st.session_state:
 if "ultimo_feedback" not in st.session_state:
     st.session_state.ultimo_feedback = {}
 
+if "casos_finalizados" not in st.session_state:
+    st.session_state.casos_finalizados = {}
+
 if "caso_atual" not in st.session_state:
     st.session_state.caso_atual = None
 
@@ -133,7 +136,11 @@ if nome:
     if caso_escolhido not in st.session_state.respostas_temp:
         st.session_state.respostas_temp[caso_escolhido] = ""
 
+    if caso_escolhido not in st.session_state.casos_finalizados:
+        st.session_state.casos_finalizados[caso_escolhido] = False
+
     tentativa = st.session_state.tentativas[caso_escolhido]
+    finalizado = st.session_state.casos_finalizados[caso_escolhido]
 
     st.subheader("📌 Texto inicial com problema")
     st.warning(caso["texto"])
@@ -143,43 +150,44 @@ if nome:
 
     st.write(f"### Tentativa atual: {tentativa}")
 
-    if tentativa == 1:
+    if finalizado:
+        st.success("✅ Este caso foi encerrado. Siga para o próximo caso.")
+    elif tentativa == 1:
         st.info("🟢 Primeira tentativa: reformule o texto com clareza e profissionalismo.")
     elif tentativa == 2:
         st.warning("🟡 Segunda tentativa: atenção aos pontos apontados pela IA. Ainda não será entregue resposta pronta.")
     elif tentativa == 3:
-        st.error("🔴 Terceira tentativa: se ainda não estiver adequado, a IA apresentará uma versão recomendada para orientar sua reformulação.")
-    else:
-        st.error("🚨 Você já passou da terceira tentativa. Revise as orientações e faça uma construção final com mais atenção.")
+        st.error("🔴 Terceira tentativa: se ainda não estiver adequado, a IA apresentará a versão recomendada e este caso será encerrado.")
 
-    resposta_aluno = st.text_area(
-        "Reescreva o texto de forma mais clara, profissional e adequada:",
-        value=st.session_state.respostas_temp[caso_escolhido],
-        height=160,
-        key=f"texto_{caso_escolhido}_{tentativa}"
-    )
+    if not finalizado:
+        resposta_aluno = st.text_area(
+            "Reescreva o texto de forma mais clara, profissional e adequada:",
+            value=st.session_state.respostas_temp[caso_escolhido],
+            height=160,
+            key=f"texto_{caso_escolhido}_{tentativa}"
+        )
 
-    col1, col2 = st.columns([1, 1])
+        col1, col2 = st.columns([1, 1])
 
-    with col1:
-        enviar = st.button("📩 Enviar para análise da consultoria IA")
+        with col1:
+            enviar = st.button("📩 Enviar para análise da consultoria IA")
 
-    with col2:
-        refazer = st.button("🔄 Refazer / Nova tentativa")
+        with col2:
+            refazer = st.button("🔄 Refazer tentativa")
 
-    if refazer:
-        st.session_state.respostas_temp[caso_escolhido] = ""
-        st.rerun()
+        if refazer:
+            st.session_state.respostas_temp[caso_escolhido] = ""
+            st.rerun()
 
-    if enviar:
-        if not resposta_aluno.strip():
-            st.warning("Digite sua reformulação antes de enviar.")
-        else:
-            st.session_state.respostas_temp[caso_escolhido] = resposta_aluno
+        if enviar:
+            if not resposta_aluno.strip():
+                st.warning("Digite sua reformulação antes de enviar.")
+            else:
+                st.session_state.respostas_temp[caso_escolhido] = resposta_aluno
 
-            with st.spinner("A consultoria IA está analisando sua resposta..."):
+                with st.spinner("A consultoria IA está analisando sua resposta..."):
 
-                prompt = f"""
+                    prompt = f"""
 Você é um consultor especialista em comunicação empresarial escrita.
 
 Seu papel é avaliar e orientar funcionários administrativos que precisam melhorar a clareza e o profissionalismo da comunicação.
@@ -190,7 +198,7 @@ IMPORTANTE:
 - Seja firme quanto à qualidade da comunicação.
 - NÃO reescreva o texto nas tentativas 1 e 2.
 - NÃO entregue resposta pronta nas tentativas 1 e 2.
-- Na tentativa 3, se ainda estiver inadequado, apresente uma melhor alternativa e peça para o aluno refazer de acordo com a orientação.
+- Na tentativa 3, se ainda estiver inadequado, apresente uma versão recomendada e informe que o aluno deve seguir para o próximo caso após revisar a orientação.
 
 OBJETIVO DO EXERCÍCIO:
 O aluno deve reformular o texto apresentado, eliminando ambiguidade ou ajustando a linguagem ao público correto.
@@ -227,11 +235,12 @@ Se não estiver satisfatório na tentativa 1 ou 2:
 - Não dê texto pronto.
 - Escreva claramente: Status: Precisa melhorar
 
-Se não estiver satisfatório na tentativa 3:
-- Explique o problema.
-- Mostre uma versão recomendada.
-- Peça para o aluno refazer seguindo a orientação.
-- Escreva claramente: Status: Precisa melhorar
+Se for tentativa 3:
+- Avalie a resposta.
+- Se ainda não estiver satisfatória, mostre uma versão recomendada.
+- Explique por que a versão recomendada é melhor.
+- Peça para o aluno seguir para o próximo caso.
+- Escreva claramente: Status: Encerrado com orientação
 
 FORMATO DA RESPOSTA:
 
@@ -241,52 +250,60 @@ Avaliação:
 Sugestão da IA:
 - ...
 
+Versão recomendada:
+- Somente preencher na terceira tentativa, se necessário.
+
 Status:
-- Satisfatório ou Precisa melhorar
+- Satisfatório, Precisa melhorar ou Encerrado com orientação
 """
 
-                feedback = chamar_gemini(prompt, api_key)
+                    feedback = chamar_gemini(prompt, api_key)
 
-                st.session_state.ultimo_feedback[caso_escolhido] = feedback
+                    st.session_state.ultimo_feedback[caso_escolhido] = feedback
 
-                st.subheader("📋 Retorno da Consultoria IA")
-                st.write(feedback)
+                    st.subheader("📋 Retorno da Consultoria IA")
+                    st.write(feedback)
 
-                status = "Precisa melhorar"
-                feedback_lower = feedback.lower()
+                    feedback_lower = feedback.lower()
 
-                if "status: satisfatório" in feedback_lower or "status:\n- satisfatório" in feedback_lower:
-                    status = "Satisfatório"
-
-                dados = {
-                    "data_hora": datetime.now().strftime("%d/%m/%Y %H:%M:%S"),
-                    "nome": nome,
-                    "caso": caso_escolhido,
-                    "texto_inicial": caso["texto"],
-                    "texto_aluno": resposta_aluno,
-                    "sugestao_ia": feedback,
-                    "tentativa": tentativa,
-                    "status": status
-                }
-
-                salvou = salvar_planilha(dados, webhook_url)
-
-                if salvou:
-                    st.success("Resposta salva na planilha.")
-                else:
-                    st.error("Erro ao salvar na planilha.")
-
-                if status == "Satisfatório":
-                    st.success("✅ Atividade considerada satisfatória para este caso.")
-                else:
-                    st.session_state.tentativas[caso_escolhido] += 1
-
-                    if tentativa == 1:
-                        st.warning("Clique em **Refazer / Nova tentativa** para limpar o campo e escrever sua segunda tentativa.")
-                    elif tentativa == 2:
-                        st.warning("Clique em **Refazer / Nova tentativa** para limpar o campo e escrever sua terceira tentativa. Na terceira, a IA poderá apresentar uma versão recomendada.")
+                    if "status: satisfatório" in feedback_lower or "status:\n- satisfatório" in feedback_lower:
+                        status = "Satisfatório"
                     elif tentativa >= 3:
-                        st.warning("A IA já apresentou orientação avançada. Clique em **Refazer / Nova tentativa** e construa uma versão final seguindo a recomendação.")
+                        status = "Encerrado com orientação"
+                    else:
+                        status = "Precisa melhorar"
+
+                    dados = {
+                        "data_hora": datetime.now().strftime("%d/%m/%Y %H:%M:%S"),
+                        "nome": nome,
+                        "caso": caso_escolhido,
+                        "texto_inicial": caso["texto"],
+                        "texto_aluno": resposta_aluno,
+                        "sugestao_ia": feedback,
+                        "tentativa": tentativa,
+                        "status": status
+                    }
+
+                    salvou = salvar_planilha(dados, webhook_url)
+
+                    if salvou:
+                        st.success("Resposta salva na planilha.")
+                    else:
+                        st.error("Erro ao salvar na planilha.")
+
+                    if status == "Satisfatório":
+                        st.session_state.casos_finalizados[caso_escolhido] = True
+                        st.success("✅ Atividade considerada satisfatória. Siga para o próximo caso.")
+                    elif tentativa >= 3:
+                        st.session_state.casos_finalizados[caso_escolhido] = True
+                        st.warning("📌 Este caso foi encerrado com orientação. O aluno deve seguir para o próximo caso.")
+                    else:
+                        st.session_state.tentativas[caso_escolhido] += 1
+
+                        if tentativa == 1:
+                            st.warning("Clique em **Refazer tentativa** para limpar o campo e escrever sua segunda tentativa.")
+                        elif tentativa == 2:
+                            st.warning("Clique em **Refazer tentativa** para limpar o campo e escrever sua terceira tentativa. Na terceira, a IA poderá apresentar uma versão recomendada.")
 
     if caso_escolhido in st.session_state.ultimo_feedback:
         st.divider()
