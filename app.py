@@ -43,44 +43,53 @@ def salvar_planilha(dados, webhook_url):
 
 
 # ---------- CASOS ----------
-casos = {
-    "Caso 1 - Ambiguidade: prazo indefinido": {
+casos = [
+    {
+        "nome": "Caso 1 - Ambiguidade: prazo indefinido",
         "texto": "Fale com o cliente quando puder.",
         "problema": "A frase não informa prazo. O leitor não sabe se deve falar hoje, amanhã ou em outro momento."
     },
-    "Caso 2 - Ambiguidade: urgência vaga": {
+    {
+        "nome": "Caso 2 - Ambiguidade: urgência vaga",
         "texto": "Preciso do relatório rápido.",
         "problema": "A palavra 'rápido' é subjetiva. Pode significar em minutos, horas ou até no fim do dia."
     },
-    "Caso 3 - Ambiguidade: quantidade imprecisa": {
+    {
+        "nome": "Caso 3 - Ambiguidade: quantidade imprecisa",
         "texto": "Quase todo mundo confirmou presença.",
         "problema": "A frase não apresenta quantidade exata. Em ambiente profissional, números evitam dúvida."
     },
-    "Caso 4 - Ambiguidade: tempo indefinido": {
+    {
+        "nome": "Caso 4 - Ambiguidade: tempo indefinido",
         "texto": "Vamos resolver isso depois.",
         "problema": "A palavra 'depois' não define quando a ação será feita, gerando insegurança e atraso."
     },
-    "Caso 5 - Ambiguidade: frequência indefinida": {
+    {
+        "nome": "Caso 5 - Ambiguidade: frequência indefinida",
         "texto": "O produto está em falta às vezes.",
         "problema": "A expressão 'às vezes' não indica frequência. Falta precisão para orientar decisões."
     },
-    "Caso 6 - Público: Diretoria": {
+    {
+        "nome": "Caso 6 - Público: Diretoria",
         "texto": "A equipe teve alguns problemas operacionais e estamos ajustando algumas coisas.",
         "problema": "Para a diretoria, o texto precisa focar em resultado, impacto, dados e decisão. Está vago demais."
     },
-    "Caso 7 - Público: Cliente": {
+    {
+        "nome": "Caso 7 - Público: Cliente",
         "texto": "Devido a inconsistências sistêmicas na base operacional, houve uma intercorrência.",
         "problema": "Para clientes, a linguagem deve ser clara, educada e compreensível. O texto usa termos técnicos demais."
     },
-    "Caso 8 - Público: Equipe interna": {
+    {
+        "nome": "Caso 8 - Público: Equipe interna",
         "texto": "Solicito que os procedimentos sejam realizados conforme alinhamento estratégico prévio.",
         "problema": "Para colegas de equipe, o texto pode ser mais direto, colaborativo e prático, sem perder profissionalismo."
     },
-    "Caso 9 - Público: Fornecedor": {
+    {
+        "nome": "Caso 9 - Público: Fornecedor",
         "texto": "Vê aí quando consegue entregar.",
         "problema": "Para fornecedores, a comunicação deve ser objetiva, formal e clara quanto a prazos e expectativas."
     }
-}
+]
 
 
 # ---------- INTERFACE ----------
@@ -96,6 +105,28 @@ st.write("Treinamento prático sobre clareza, objetividade, ambiguidade e adapta
 api_key = st.secrets.get("GEMINI_API_KEY")
 webhook_url = st.secrets.get("SHEETS_WEBHOOK_URL")
 
+
+# ---------- ESTADOS ----------
+if "indice_caso" not in st.session_state:
+    st.session_state.indice_caso = 0
+
+if "tentativa" not in st.session_state:
+    st.session_state.tentativa = 1
+
+if "resposta_temp" not in st.session_state:
+    st.session_state.resposta_temp = ""
+
+if "ultimo_feedback" not in st.session_state:
+    st.session_state.ultimo_feedback = ""
+
+if "caso_finalizado" not in st.session_state:
+    st.session_state.caso_finalizado = False
+
+if "atividade_finalizada" not in st.session_state:
+    st.session_state.atividade_finalizada = False
+
+
+# ---------- SIDEBAR ----------
 with st.sidebar:
     st.header("👤 Identificação")
     nome = st.text_input("Nome do aluno:")
@@ -105,89 +136,70 @@ with st.sidebar:
         st.rerun()
 
 
-# ---------- ESTADOS ----------
-if "tentativas" not in st.session_state:
-    st.session_state.tentativas = {}
+# ---------- JOGO ----------
+if not nome:
+    st.warning("👈 Digite seu nome na barra lateral para começar.")
 
-if "respostas_temp" not in st.session_state:
-    st.session_state.respostas_temp = {}
+else:
+    total_casos = len(casos)
 
-if "ultimo_feedback" not in st.session_state:
-    st.session_state.ultimo_feedback = {}
+    if st.session_state.atividade_finalizada:
+        st.success("🎉 Parabéns! Você concluiu todos os casos da atividade.")
+        st.info("Suas respostas foram registradas na planilha.")
+    else:
+        caso = casos[st.session_state.indice_caso]
 
-if "casos_finalizados" not in st.session_state:
-    st.session_state.casos_finalizados = {}
+        st.progress((st.session_state.indice_caso) / total_casos)
+        st.write(f"### Progresso: Caso {st.session_state.indice_caso + 1} de {total_casos}")
 
-if "caso_atual" not in st.session_state:
-    st.session_state.caso_atual = None
+        st.subheader(f"📚 {caso['nome']}")
 
+        st.subheader("📌 Texto inicial com problema")
+        st.warning(caso["texto"])
 
-if nome:
-    caso_escolhido = st.selectbox("Escolha o caso:", list(casos.keys()))
-    caso = casos[caso_escolhido]
+        st.subheader("🔎 Explicação do problema")
+        st.info(caso["problema"])
 
-    if st.session_state.caso_atual != caso_escolhido:
-        st.session_state.caso_atual = caso_escolhido
-        st.session_state.respostas_temp[caso_escolhido] = ""
+        st.write(f"### Tentativa atual: {st.session_state.tentativa}")
 
-    if caso_escolhido not in st.session_state.tentativas:
-        st.session_state.tentativas[caso_escolhido] = 1
+        if st.session_state.caso_finalizado:
+            st.success("✅ Este caso foi encerrado. Clique em **Próximo caso** para continuar.")
+        elif st.session_state.tentativa == 1:
+            st.info("🟢 Primeira tentativa: reformule o texto com clareza e profissionalismo.")
+        elif st.session_state.tentativa == 2:
+            st.warning("🟡 Segunda tentativa: atenção aos pontos apontados pela IA. Ainda não será entregue resposta pronta.")
+        elif st.session_state.tentativa == 3:
+            st.error("🔴 Terceira tentativa: se ainda não estiver adequado, a IA apresentará a versão recomendada e este caso será encerrado.")
 
-    if caso_escolhido not in st.session_state.respostas_temp:
-        st.session_state.respostas_temp[caso_escolhido] = ""
+        if not st.session_state.caso_finalizado:
+            resposta_aluno = st.text_area(
+                "Reescreva o texto de forma mais clara, profissional e adequada:",
+                value=st.session_state.resposta_temp,
+                height=160,
+                key=f"texto_caso_{st.session_state.indice_caso}_tentativa_{st.session_state.tentativa}"
+            )
 
-    if caso_escolhido not in st.session_state.casos_finalizados:
-        st.session_state.casos_finalizados[caso_escolhido] = False
+            col1, col2 = st.columns([1, 1])
 
-    tentativa = st.session_state.tentativas[caso_escolhido]
-    finalizado = st.session_state.casos_finalizados[caso_escolhido]
+            with col1:
+                enviar = st.button("📩 Enviar para análise da consultoria IA")
 
-    st.subheader("📌 Texto inicial com problema")
-    st.warning(caso["texto"])
+            with col2:
+                refazer = st.button("🔄 Refazer tentativa")
 
-    st.subheader("🔎 Explicação do problema")
-    st.info(caso["problema"])
+            if refazer:
+                st.session_state.resposta_temp = ""
+                st.rerun()
 
-    st.write(f"### Tentativa atual: {tentativa}")
+            if enviar:
+                if not resposta_aluno.strip():
+                    st.warning("Digite sua reformulação antes de enviar.")
+                else:
+                    st.session_state.resposta_temp = resposta_aluno
 
-    if finalizado:
-        st.success("✅ Este caso foi encerrado. Siga para o próximo caso.")
-    elif tentativa == 1:
-        st.info("🟢 Primeira tentativa: reformule o texto com clareza e profissionalismo.")
-    elif tentativa == 2:
-        st.warning("🟡 Segunda tentativa: atenção aos pontos apontados pela IA. Ainda não será entregue resposta pronta.")
-    elif tentativa == 3:
-        st.error("🔴 Terceira tentativa: se ainda não estiver adequado, a IA apresentará a versão recomendada e este caso será encerrado.")
+                    with st.spinner("A consultoria IA está analisando sua resposta..."):
 
-    if not finalizado:
-        resposta_aluno = st.text_area(
-            "Reescreva o texto de forma mais clara, profissional e adequada:",
-            value=st.session_state.respostas_temp[caso_escolhido],
-            height=160,
-            key=f"texto_{caso_escolhido}_{tentativa}"
-        )
-
-        col1, col2 = st.columns([1, 1])
-
-        with col1:
-            enviar = st.button("📩 Enviar para análise da consultoria IA")
-
-        with col2:
-            refazer = st.button("🔄 Refazer tentativa")
-
-        if refazer:
-            st.session_state.respostas_temp[caso_escolhido] = ""
-            st.rerun()
-
-        if enviar:
-            if not resposta_aluno.strip():
-                st.warning("Digite sua reformulação antes de enviar.")
-            else:
-                st.session_state.respostas_temp[caso_escolhido] = resposta_aluno
-
-                with st.spinner("A consultoria IA está analisando sua resposta..."):
-
-                    prompt = f"""
+                        prompt = f"""
 Você é um consultor especialista em comunicação empresarial escrita.
 
 Seu papel é avaliar e orientar funcionários administrativos que precisam melhorar a clareza e o profissionalismo da comunicação.
@@ -204,7 +216,7 @@ OBJETIVO DO EXERCÍCIO:
 O aluno deve reformular o texto apresentado, eliminando ambiguidade ou ajustando a linguagem ao público correto.
 
 TENTATIVA ATUAL:
-{tentativa}
+{st.session_state.tentativa}
 
 CRITÉRIOS DE AVALIAÇÃO:
 - Clareza
@@ -257,58 +269,71 @@ Status:
 - Satisfatório, Precisa melhorar ou Encerrado com orientação
 """
 
-                    feedback = chamar_gemini(prompt, api_key)
+                        feedback = chamar_gemini(prompt, api_key)
+                        st.session_state.ultimo_feedback = feedback
 
-                    st.session_state.ultimo_feedback[caso_escolhido] = feedback
+                        st.subheader("📋 Retorno da Consultoria IA")
+                        st.write(feedback)
 
-                    st.subheader("📋 Retorno da Consultoria IA")
-                    st.write(feedback)
+                        feedback_lower = feedback.lower()
 
-                    feedback_lower = feedback.lower()
+                        if "status: satisfatório" in feedback_lower or "status:\n- satisfatório" in feedback_lower:
+                            status = "Satisfatório"
+                        elif st.session_state.tentativa >= 3:
+                            status = "Encerrado com orientação"
+                        else:
+                            status = "Precisa melhorar"
 
-                    if "status: satisfatório" in feedback_lower or "status:\n- satisfatório" in feedback_lower:
-                        status = "Satisfatório"
-                    elif tentativa >= 3:
-                        status = "Encerrado com orientação"
-                    else:
-                        status = "Precisa melhorar"
+                        dados = {
+                            "data_hora": datetime.now().strftime("%d/%m/%Y %H:%M:%S"),
+                            "nome": nome,
+                            "caso": caso["nome"],
+                            "texto_inicial": caso["texto"],
+                            "texto_aluno": resposta_aluno,
+                            "sugestao_ia": feedback,
+                            "tentativa": st.session_state.tentativa,
+                            "status": status
+                        }
 
-                    dados = {
-                        "data_hora": datetime.now().strftime("%d/%m/%Y %H:%M:%S"),
-                        "nome": nome,
-                        "caso": caso_escolhido,
-                        "texto_inicial": caso["texto"],
-                        "texto_aluno": resposta_aluno,
-                        "sugestao_ia": feedback,
-                        "tentativa": tentativa,
-                        "status": status
-                    }
+                        salvou = salvar_planilha(dados, webhook_url)
 
-                    salvou = salvar_planilha(dados, webhook_url)
+                        if salvou:
+                            st.success("Resposta salva na planilha.")
+                        else:
+                            st.error("Erro ao salvar na planilha.")
 
-                    if salvou:
-                        st.success("Resposta salva na planilha.")
-                    else:
-                        st.error("Erro ao salvar na planilha.")
+                        if status == "Satisfatório":
+                            st.session_state.caso_finalizado = True
+                            st.success("✅ Resposta satisfatória. Clique em **Próximo caso** para continuar.")
 
-                    if status == "Satisfatório":
-                        st.session_state.casos_finalizados[caso_escolhido] = True
-                        st.success("✅ Atividade considerada satisfatória. Siga para o próximo caso.")
-                    elif tentativa >= 3:
-                        st.session_state.casos_finalizados[caso_escolhido] = True
-                        st.warning("📌 Este caso foi encerrado com orientação. O aluno deve seguir para o próximo caso.")
-                    else:
-                        st.session_state.tentativas[caso_escolhido] += 1
+                        elif st.session_state.tentativa >= 3:
+                            st.session_state.caso_finalizado = True
+                            st.warning("📌 Este caso foi encerrado com orientação. Clique em **Próximo caso** para continuar.")
 
-                        if tentativa == 1:
-                            st.warning("Clique em **Refazer tentativa** para limpar o campo e escrever sua segunda tentativa.")
-                        elif tentativa == 2:
-                            st.warning("Clique em **Refazer tentativa** para limpar o campo e escrever sua terceira tentativa. Na terceira, a IA poderá apresentar uma versão recomendada.")
+                        else:
+                            st.session_state.tentativa += 1
+                            if st.session_state.tentativa == 2:
+                                st.warning("Clique em **Refazer tentativa** para limpar o campo e escrever sua segunda tentativa.")
+                            elif st.session_state.tentativa == 3:
+                                st.warning("Clique em **Refazer tentativa** para limpar o campo e escrever sua terceira tentativa. Na terceira, a IA poderá apresentar uma versão recomendada.")
 
-    if caso_escolhido in st.session_state.ultimo_feedback:
-        st.divider()
-        st.subheader("🧾 Último retorno recebido")
-        st.write(st.session_state.ultimo_feedback[caso_escolhido])
+        if st.session_state.ultimo_feedback:
+            st.divider()
+            st.subheader("🧾 Último retorno recebido")
+            st.write(st.session_state.ultimo_feedback)
 
-else:
-    st.warning("👈 Digite seu nome na barra lateral para começar.")
+        if st.session_state.caso_finalizado:
+            st.divider()
+
+            if st.session_state.indice_caso < total_casos - 1:
+                if st.button("➡️ Próximo caso"):
+                    st.session_state.indice_caso += 1
+                    st.session_state.tentativa = 1
+                    st.session_state.resposta_temp = ""
+                    st.session_state.ultimo_feedback = ""
+                    st.session_state.caso_finalizado = False
+                    st.rerun()
+            else:
+                if st.button("🏁 Finalizar atividade"):
+                    st.session_state.atividade_finalizada = True
+                    st.rerun()
