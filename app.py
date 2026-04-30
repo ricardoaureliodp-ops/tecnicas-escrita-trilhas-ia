@@ -296,8 +296,9 @@ Status:
                 st.write(feedback)
 
                 feedback_lower = feedback.lower()
+                texto_status = feedback_lower.replace(" ", "").replace("\n", "")
 
-                if "status: satisfatório" in feedback_lower or "status:\n- satisfatório" in feedback_lower:
+                if "status:satisfatório" in texto_status or "status:-satisfatório" in texto_status or "satisfatório" in texto_status:
                     status = "Satisfatório"
                 elif st.session_state.tentativa >= 3:
                     status = "Encerrado com orientação"
@@ -325,10 +326,12 @@ Status:
                 if status == "Satisfatório":
                     st.session_state.caso_finalizado = True
                     st.success("✅ Resposta satisfatória. Clique em **Próximo caso** para continuar.")
+                    st.rerun()
 
                 elif st.session_state.tentativa >= 3:
                     st.session_state.caso_finalizado = True
                     st.warning("📌 Este caso foi encerrado com orientação. Clique em **Próximo caso** para continuar.")
+                    st.rerun()
 
                 else:
                     st.session_state.tentativa += 1
